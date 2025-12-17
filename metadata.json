@@ -1,0 +1,7 @@
+{
+  "name": "Contas em Dia!",
+  "description": "Um aplicativo moderno para controle financeiro diário, permitindo rastrear receitas e despesas com visualização de dados e consultoria financeira inteligente via Gemini AI.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
