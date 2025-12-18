@@ -3,67 +3,39 @@
 function buildPrompt(transactions) {
   return `
 Atue como um consultor financeiro pessoal especialista.
-
-Analise as transações abaixo (de um usuário brasileiro) e entregue:
-1) Resumo da saúde financeira atual
-2) Maior categoria de gastos
-3) 3 recomendações práticas e acionáveis (baseadas nesses dados)
-4) Alertas de risco (se houver)
-5) Um plano simples para os próximos 7 dias
-
-Transações:
+Analise os seguintes dados financeiros (transações) de um usuário brasileiro:
 ${JSON.stringify(transactions, null, 2)}
+
+Por favor, forneça:
+1. Um breve resumo da saúde financeira atual.
+2. Identifique a maior categoria de gastos.
+3. Dê 3 dicas práticas e acionáveis para economizar dinheiro baseadas nesses dados específicos.
+4. Use formatação Markdown (negrito, listas) para facilitar a leitura.
+5. Mantenha o tom amigável, encorajador e direto. Responda em Português do Brasil.
 `.trim();
 }
 
 exports.handler = async (event) => {
-  // CORS (se precisar)
-  if (event.httpMethod === "OPTIONS") {
-    return {
-      statusCode: 204,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "Content-Type",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-      },
-      body: "",
-    };
-  }
-
-  if (event.httpMethod !== "POST") {
-    return {
-      statusCode: 405,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ error: "Method Not Allowed" }),
-    };
-  }
-
   try {
+    if (event.httpMethod !== "POST") {
+      return { statusCode: 405, body: "Method Not Allowed" };
+    }
+
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return {
         statusCode: 500,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ error: "Missing GEMINI_API_KEY in Netlify env vars." }),
+        body: JSON.stringify({ error: "GEMINI_API_KEY não configurada no Netlify." }),
       };
     }
 
-    const body = event.body ? JSON.parse(event.body) : {};
-    const transactions = Array.isArray(body) ? body : body.transactions;
+    const body = JSON.parse(event.body || "{}");
+    const transactions = body.transactions || [];
 
-    if (!Array.isArray(transactions)) {
-      return {
-        statusCode: 400,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ error: "Body must be { transactions: [...] }" }),
-      };
-    }
-
-    const model = process.env.GEMINI_MODEL || "gemini-1.5-flash";
     const prompt = buildPrompt(transactions);
 
     const url =
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
     const resp = await fetch(url, {
       method: "POST",
@@ -74,32 +46,25 @@ exports.handler = async (event) => {
       }),
     });
 
-    const json = await resp.json();
+    const data = await resp.json();
 
     if (!resp.ok) {
-      return {
-        statusCode: resp.status,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ error: json?.error || json }),
-      };
+      console.error("Gemini error:", data);
+      return { statusCode: resp.status, body: JSON.stringify({ error: data }) };
     }
 
     const text =
-      json?.candidates?.[0]?.content?.parts?.map((p) => p.text).join("") ||
-      "Não foi possível gerar a análise no momento.";
+      data?.candidates?.[0]?.content?.parts?.map((p) => p.text).join("") || "";
 
     return {
       statusCode: 200,
-      headers: {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*",
-      },
-      body: JSON.stringify({ text }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, advice: text }),
     };
   } catch (err) {
+    console.error("Function crash:", err);
     return {
       statusCode: 500,
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ error: String(err?.message || err) }),
     };
   }
