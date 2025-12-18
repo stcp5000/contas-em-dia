@@ -1,4 +1,4 @@
-// netlify/functions/gemini-advice.js
+// netlify/functions/gemini-advice.cjs
 
 function buildPrompt(transactions) {
   return `
