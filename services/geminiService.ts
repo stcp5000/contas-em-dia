@@ -2,13 +2,20 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { Transaction, Category, TransactionType } from '../types';
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+
+let ai: GoogleGenAI | null = null;
+if (API_KEY) {
+  ai = new GoogleGenAI({ apiKey: API_KEY });
+}
 
 export const getFinancialAdvice = async (transactions: Transaction[]): Promise<string> => {
   if (transactions.length === 0) {
     return "Adicione algumas transações para que eu possa analisar seus hábitos financeiros.";
   }
-
+if (!ai) {
+  return "⚠️ A análise por IA está desativada porque a chave VITE_GEMINI_API_KEY não foi configurada no Netlify.";
+}
   // Prepare a simplified version of data for the AI to save tokens and improve focus
   const dataSummary = transactions.map(t => ({
     date: t.date,
