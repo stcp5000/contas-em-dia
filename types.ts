@@ -23,6 +23,7 @@ export interface Transaction {
   type: TransactionType;
   category: Category | string;
   date: string;
+  dueDate?: string;
   isPaid: boolean;
 }
 
@@ -35,4 +36,21 @@ export interface FinancialSummary {
 export interface UserProfile {
   name: string;
   avatar: string;
+}
+
+export enum Frequency {
+  DAILY = 'Diário',
+  WEEKLY = 'Semanal',
+  MONTHLY = 'Mensal'
+}
+
+export interface Reminder {
+  id: string;
+  title: string;
+  amount?: number;
+  frequency: Frequency;
+  dayOfWeek?: number; // 0-6
+  dayOfMonth?: number; // 1-31
+  time: string; // HH:mm
+  isActive: boolean;
 }

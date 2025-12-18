@@ -1,7 +1,8 @@
-import { GoogleGenAI } from "@google/genai";
+
+import { GoogleGenAI, Type } from "@google/genai";
 import { Transaction, Category, TransactionType } from '../types';
 
-const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const getFinancialAdvice = async (transactions: Transaction[]): Promise<string> => {
   if (transactions.length === 0) {
@@ -11,6 +12,7 @@ export const getFinancialAdvice = async (transactions: Transaction[]): Promise<s
   // Prepare a simplified version of data for the AI to save tokens and improve focus
   const dataSummary = transactions.map(t => ({
     date: t.date,
+    dueDate: t.dueDate,
     desc: t.description,
     amount: t.amount,
     type: t.type,
@@ -32,7 +34,7 @@ export const getFinancialAdvice = async (transactions: Transaction[]): Promise<s
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3-flash-preview',
       contents: prompt,
       config: {
         systemInstruction: "Você é um assistente financeiro útil e inteligente.",
@@ -49,29 +51,22 @@ export const getFinancialAdvice = async (transactions: Transaction[]): Promise<s
 
 // Function to analyze a bill image
 export const analyzeBillImage = async (base64Image: string, availableCategories?: string[]): Promise<Partial<Transaction> | null> => {
-  // Use provided categories or fallback to default Enum values
   const categoriesToList = availableCategories && availableCategories.length > 0 
     ? availableCategories 
     : Object.values(Category);
 
   const prompt = `
     Analise esta imagem de uma conta, boleto ou recibo fiscal brasileiro.
-    Extraia as seguintes informações em formato JSON estrito:
-    1. "description": O nome do estabelecimento ou beneficiário (ex: "Conta de Luz Enel", "Supermercado X", "Netflix").
-    2. "amount": O valor total numérico (float).
-    3. "date": A data de vencimento ou da compra no formato YYYY-MM-DD.
-    4. "category": Escolha a categoria mais apropriada DESTA LISTA EXATA: [${categoriesToList.join(', ')}]. Se nenhuma se encaixar perfeitamente, escolha "Outros" ou a mais próxima.
-    
-    Se não conseguir identificar algum campo, tente inferir pelo contexto ou deixe nulo.
-    Retorne APENAS o JSON, sem markdown.
+    Extraia as informações necessárias para preencher os campos de uma nova transação financeira.
+    Identifique especificamente a data de emissão (date) e a data de vencimento (dueDate), se houver.
+    Escolha a categoria mais apropriada DESTA LISTA EXATA: [${categoriesToList.join(', ')}].
   `;
 
   try {
-    // Clean the base64 string if it contains the data header
     const cleanBase64 = base64Image.replace(/^data:image\/(png|jpeg|jpg|webp);base64,/, "");
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3-flash-preview',
       contents: {
         parts: [
           { inlineData: { mimeType: 'image/jpeg', data: cleanBase64 } },
@@ -79,7 +74,33 @@ export const analyzeBillImage = async (base64Image: string, availableCategories?
         ]
       },
       config: {
-        responseMimeType: "application/json"
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            description: {
+              type: Type.STRING,
+              description: "O nome do estabelecimento ou beneficiário"
+            },
+            amount: {
+              type: Type.NUMBER,
+              description: "O valor total numérico"
+            },
+            date: {
+              type: Type.STRING,
+              description: "A data de emissão no formato YYYY-MM-DD"
+            },
+            dueDate: {
+              type: Type.STRING,
+              description: "A data de vencimento no formato YYYY-MM-DD"
+            },
+            category: {
+              type: Type.STRING,
+              description: "A categoria escolhida da lista fornecida"
+            }
+          },
+          required: ["description", "amount", "date", "category"]
+        }
       }
     });
 
@@ -92,8 +113,9 @@ export const analyzeBillImage = async (base64Image: string, availableCategories?
       description: data.description,
       amount: typeof data.amount === 'number' ? data.amount : parseFloat(data.amount),
       date: data.date,
+      dueDate: data.dueDate || data.date,
       category: data.category,
-      type: TransactionType.EXPENSE // Scanned bills are usually expenses
+      type: TransactionType.EXPENSE
     };
 
   } catch (error) {

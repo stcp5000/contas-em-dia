@@ -1,5 +1,6 @@
+
 import React, { useState, useRef } from 'react';
-import { PlusCircle, Camera, Loader2, ScanLine, Settings } from 'lucide-react';
+import { PlusCircle, Camera, Loader2, ScanLine, Settings, Calendar, ArrowUpCircle, ArrowDownCircle } from 'lucide-react';
 import { Category, Transaction, TransactionType } from '../types';
 import { analyzeBillImage } from '../services/geminiService';
 import { CategoryManager } from './CategoryManager';
@@ -9,24 +10,33 @@ interface TransactionFormProps {
   categories: string[];
   onAddCategory: (category: string) => void;
   onRemoveCategory: (category: string) => void;
+  onUpdateCategory?: (oldName: string, newName: string) => void;
 }
 
 export const TransactionForm: React.FC<TransactionFormProps> = ({ 
   onAddTransaction, 
   categories, 
   onAddCategory, 
-  onRemoveCategory 
+  onRemoveCategory,
+  onUpdateCategory
 }) => {
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [type, setType] = useState<TransactionType>(TransactionType.EXPENSE);
   const [category, setCategory] = useState<string>(categories[0] || Category.FOOD);
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [dueDate, setDueDate] = useState(new Date().toISOString().split('T')[0]);
   const [isPaid, setIsPaid] = useState(true);
   
   const [isScanning, setIsScanning] = useState(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleDateChange = (newDate: string) => {
+    setDate(newDate);
+    // Auto-suggest due date as the same transaction date if it hasn't been manually changed much
+    setDueDate(newDate);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,6 +48,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       type,
       category,
       date,
+      dueDate: type === TransactionType.EXPENSE ? dueDate : undefined,
       isPaid,
     });
 
@@ -56,20 +67,18 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       const reader = new FileReader();
       reader.onloadend = async () => {
         const base64String = reader.result as string;
-        // Pass dynamic categories to the AI service
         const result = await analyzeBillImage(base64String, categories);
         
         if (result) {
           if (result.description) setDescription(result.description);
           if (result.amount) setAmount(result.amount.toString());
-          if (result.date) setDate(result.date);
+          if (result.date) {
+            setDate(result.date);
+            setDueDate(result.dueDate || result.date);
+          }
           if (result.category && categories.includes(result.category)) {
             setCategory(result.category);
           } else if (result.category) {
-            // Handle case where AI suggests a category not in list (fallback to first or misc)
-            // Or ideally, check fuzzy match, but for now fallback to existing list
-            // If the category exists in the list (even if not exact match logic implemented), use it.
-            // Otherwise default to first available.
             setCategory(categories.includes(result.category) ? result.category : (categories[0] || 'Outros'));
           }
           if (result.type) setType(result.type);
@@ -156,27 +165,33 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           </div>
 
           <div className="lg:col-span-2">
-            <label className="block text-xs font-bold uppercase tracking-wide text-slate-500 mb-2">Tipo</label>
-            <div className="flex bg-slate-100 p-1.5 rounded-xl">
+            <label className="block text-xs font-bold uppercase tracking-wide text-slate-500 mb-2">Tipo de Transação</label>
+            <div className="flex bg-slate-50 border border-slate-200/60 p-1.5 rounded-2xl shadow-inner">
               <button
                 type="button"
                 onClick={() => {
                   setType(TransactionType.INCOME);
                   setIsPaid(true); 
                 }}
-                className={`flex-1 py-3 text-sm font-bold rounded-lg transition-all ${
-                  type === TransactionType.INCOME ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                className={`flex-1 py-3 px-3 text-sm font-bold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 ${
+                  type === TransactionType.INCOME 
+                    ? 'bg-white text-emerald-600 shadow-md shadow-slate-200/50 border border-slate-200 scale-[1.02]' 
+                    : 'text-slate-400 hover:text-slate-600 hover:bg-white/50'
                 }`}
               >
+                <ArrowUpCircle className={`w-4 h-4 ${type === TransactionType.INCOME ? 'text-emerald-500' : 'text-slate-300'}`} />
                 Receita
               </button>
               <button
                 type="button"
                 onClick={() => setType(TransactionType.EXPENSE)}
-                className={`flex-1 py-3 text-sm font-bold rounded-lg transition-all ${
-                  type === TransactionType.EXPENSE ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                className={`flex-1 py-3 px-3 text-sm font-bold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 ${
+                  type === TransactionType.EXPENSE 
+                    ? 'bg-white text-rose-600 shadow-md shadow-slate-200/50 border border-slate-200 scale-[1.02]' 
+                    : 'text-slate-400 hover:text-slate-600 hover:bg-white/50'
                 }`}
               >
+                <ArrowDownCircle className={`w-4 h-4 ${type === TransactionType.EXPENSE ? 'text-rose-500' : 'text-slate-300'}`} />
                 Despesa
               </button>
             </div>
@@ -206,17 +221,32 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           </div>
 
           <div className="lg:col-span-2">
-            <label className="block text-xs font-bold uppercase tracking-wide text-slate-500 mb-2">Data</label>
+            <label className="block text-xs font-bold uppercase tracking-wide text-slate-500 mb-2">Data da Transação</label>
             <input 
                 type="date"
                 value={date}
-                onChange={(e) => setDate(e.target.value)}
+                onChange={(e) => handleDateChange(e.target.value)}
                 className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-base font-medium"
                 required
             />
           </div>
 
-          <div className="lg:col-span-2 flex items-center pt-2 md:pt-8">
+          {type === TransactionType.EXPENSE && (
+            <div className="lg:col-span-2 animate-fade-in">
+              <label className="block text-xs font-bold uppercase tracking-wide text-slate-500 mb-2 flex items-center gap-1">
+                <Calendar className="w-3 h-3" /> Data de Vencimento
+              </label>
+              <input 
+                  type="date"
+                  value={dueDate}
+                  onChange={(e) => setDueDate(e.target.value)}
+                  className="w-full p-4 bg-blue-50/50 border border-blue-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-base font-medium"
+                  required
+              />
+            </div>
+          )}
+
+          <div className={`lg:col-span-2 flex items-center pt-2 md:pt-8 ${type === TransactionType.INCOME ? 'md:col-start-5' : ''}`}>
             <label className="flex items-center gap-3 cursor-pointer select-none bg-slate-50 p-3 rounded-xl w-full">
               <div className={`w-6 h-6 rounded border flex items-center justify-center transition-colors ${isPaid ? 'bg-blue-600 border-blue-600' : 'bg-white border-slate-300'}`}>
                 {isPaid && <ScanLine className="w-4 h-4 text-white" />} 
@@ -228,12 +258,12 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
                 className="hidden" 
               />
               <span className="text-sm text-slate-700 font-semibold">
-                {isPaid ? 'Já foi pago' : 'Pagamento pendente'}
+                {isPaid ? 'Já foi pago/recebido' : 'Pagamento pendente'}
               </span>
             </label>
           </div>
           
-          <div className="lg:col-span-2 flex justify-end items-end">
+          <div className="lg:col-span-2 flex justify-end items-end md:col-start-5 lg:col-start-5">
             <button
               type="submit"
               className="bg-slate-900 hover:bg-slate-800 active:scale-95 text-white px-6 py-4 rounded-xl text-base font-bold transition-all w-full md:w-auto shadow-lg shadow-slate-200"
@@ -250,6 +280,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
         categories={categories}
         onAddCategory={onAddCategory}
         onRemoveCategory={onRemoveCategory}
+        onUpdateCategory={onUpdateCategory}
       />
     </>
   );
