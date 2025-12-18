@@ -29,20 +29,26 @@ exports.handler = async (event) => {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Content-Type": "text/plain; charset=utf-8",
+    "Content-Type": "application/json; charset=utf-8",
   };
 
+  const json = (statusCode, payload) => ({
+    statusCode,
+    headers,
+    body: JSON.stringify(payload),
+  });
+
   if (event.httpMethod === "OPTIONS") {
-    return { statusCode: 200, headers, body: "" };
+    return json(200, {});
   }
 
   if (event.httpMethod !== "POST") {
-    return { statusCode: 405, headers, body: "Method Not Allowed" };
+    return json(405, { error: "Method Not Allowed" });
   }
 
   const API_KEY = process.env.GEMINI_API_KEY;
   if (!API_KEY) {
-    return { statusCode: 500, headers, body: "Falta configurar GEMINI_API_KEY nas variáveis do Netlify." };
+    return json(500, { error: "Falta configurar GEMINI_API_KEY nas variáveis do Netlify." });
   }
 
   let parsed;
@@ -55,7 +61,7 @@ exports.handler = async (event) => {
   const transactions = Array.isArray(parsed) ? parsed : parsed.transactions;
 
   if (!Array.isArray(transactions) || transactions.length === 0) {
-    return { statusCode: 400, headers, body: 'Envie um JSON no formato: { "transactions": [...] }' };
+    return json(400, { error: 'Envie um JSON no formato: { "transactions": [...] }' });
   }
 
   const model = "gemini-3-flash-preview";
@@ -76,19 +82,18 @@ exports.handler = async (event) => {
       body: JSON.stringify(reqBody),
     });
 
-    const json = await res.json().catch(() => null);
+    const body = await res.json().catch(() => null);
 
     if (!res.ok) {
-      const msg = json?.error?.message || `Gemini API error (${res.status})`;
-      return { statusCode: 502, headers, body: msg };
+      const msg = body?.error?.message || `Gemini API error (${res.status})`;
+      return json(502, { error: msg });
     }
 
     const text =
-      json?.candidates?.[0]?.content?.parts?.map(p => p.text).join("") || "";
+      body?.candidates?.[0]?.content?.parts?.map(p => p.text).join("") || "";
 
-    return { statusCode: 200, headers, body: text || "Não foi possível gerar uma análise no momento." };
+    return json(200, { text: text || "Não foi possível gerar uma análise no momento." });
   } catch (err) {
-    return { statusCode: 502, headers, body: `Erro ao chamar Gemini: ${err?.message || err}` };
+    return json(502, { error: `Erro ao chamar Gemini: ${err?.message || err}` });
   }
 };
-
