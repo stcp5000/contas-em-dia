@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo, Suspense } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { TransactionForm } from './components/TransactionForm';
 import { TransactionList } from './components/TransactionList';
 import { DashboardCards } from './components/DashboardCards';
@@ -10,6 +10,7 @@ import { NotificationBanner } from './components/NotificationBanner';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { ReminderManager } from './components/ReminderManager';
 import { WelcomeCover } from './components/WelcomeCover';
+import { GlobalFilterBar } from './components/GlobalFilterBar';
 import { Transaction, TransactionType, FinancialSummary, UserProfile as UserProfileType, Category, Reminder } from './types';
 import { LayoutDashboard, Bell, ChevronLeft, Loader2 } from 'lucide-react';
 
@@ -23,6 +24,10 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('home'); 
   const [showCover, setShowCover] = useState(true);
   const [isInitializing, setIsInitializing] = useState(true);
+
+  // Global Filter State
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   // Modal States
   const [isReminderModalOpen, setIsReminderModalOpen] = useState(false);
@@ -123,7 +128,6 @@ const App: React.FC = () => {
 
   const handleUpdateCategory = (oldName: string, newName: string) => {
     setCategories(prev => prev.map(c => c === oldName ? newName : c));
-    // Update all transactions that were using the old category name
     setTransactions(prev => prev.map(t => t.category === oldName ? { ...t, category: newName } : t));
   };
 
@@ -139,12 +143,21 @@ const App: React.FC = () => {
     setReminders(prev => prev.map(r => r.id === id ? { ...r, isActive: !r.isActive } : r));
   };
 
+  // Centralized Filter Logic
+  const filteredTransactions = useMemo(() => {
+    return transactions.filter(t => {
+      if (startDate && t.date < startDate) return false;
+      if (endDate && t.date > endDate) return false;
+      return true;
+    });
+  }, [transactions, startDate, endDate]);
+
   const summary: FinancialSummary = useMemo(() => {
-    const totalIncome = transactions
+    const totalIncome = filteredTransactions
       .filter((t) => t.type === TransactionType.INCOME)
       .reduce((acc, curr) => acc + curr.amount, 0);
 
-    const totalExpense = transactions
+    const totalExpense = filteredTransactions
       .filter((t) => t.type === TransactionType.EXPENSE)
       .reduce((acc, curr) => acc + curr.amount, 0);
 
@@ -153,11 +166,16 @@ const App: React.FC = () => {
       totalExpense,
       balance: totalIncome - totalExpense,
     };
-  }, [transactions]);
+  }, [filteredTransactions]);
 
   const handleEnterApp = (tab: string) => {
     setActiveTab(tab);
     setShowCover(false);
+  };
+
+  const clearFilters = () => {
+    setStartDate('');
+    setEndDate('');
   };
 
   if (isInitializing) {
@@ -178,7 +196,6 @@ const App: React.FC = () => {
         />
       )}
 
-      {/* Main UI only mounts when needed for better performance */}
       {!showCover && (
         <>
           {/* Header */}
@@ -220,9 +237,21 @@ const App: React.FC = () => {
 
           {/* Main Content */}
           <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 animate-fade-in">
-            {/* Alerts & Reminders */}
+            {/* Alerts & Notifications */}
             <div className={`${activeTab === 'home' ? 'block' : 'hidden'} md:block`}>
               <NotificationBanner transactions={transactions} reminders={reminders} />
+            </div>
+
+            {/* Global Period Filter */}
+            <div className={`${activeTab === 'home' ? 'block' : 'hidden'} md:block`}>
+              <GlobalFilterBar 
+                startDate={startDate} 
+                endDate={endDate} 
+                onStartDateChange={setStartDate} 
+                onEndDateChange={setEndDate}
+                onClear={clearFilters}
+                resultsCount={filteredTransactions.length}
+              />
             </div>
 
             {/* Dashboard Cards */}
@@ -244,7 +273,7 @@ const App: React.FC = () => {
                 
                 <div className={`${activeTab === 'home' ? 'block' : 'hidden'} md:block h-full`}>
                    <TransactionList 
-                    transactions={transactions} 
+                    transactions={filteredTransactions} 
                     onDelete={handleDeleteTransaction}
                     onToggleStatus={handleToggleStatus}
                   />
@@ -253,8 +282,8 @@ const App: React.FC = () => {
 
               {/* Right Column (Charts & AI) */}
               <div className={`lg:col-span-1 space-y-6 ${activeTab === 'insights' ? 'block' : 'hidden'} md:block`}>
-                <GeminiAdvisor transactions={transactions} />
-                <StatsChart transactions={transactions} />
+                <GeminiAdvisor transactions={filteredTransactions} />
+                <StatsChart transactions={filteredTransactions} />
               </div>
             </div>
           </main>
@@ -264,7 +293,7 @@ const App: React.FC = () => {
         </>
       )}
 
-      {/* Modals always accessible */}
+      {/* Modals */}
       <ReminderManager 
         isOpen={isReminderModalOpen}
         onClose={() => setIsReminderModalOpen(false)}
