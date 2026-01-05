@@ -1,11 +1,12 @@
 
 import React, { useState, useMemo } from 'react';
 import { 
-  Trash2, ArrowUpRight, ArrowDownLeft, X, CheckCircle2, 
+  Trash2, ArrowUpRight, ArrowDownLeft, CheckCircle2, 
   Clock, AlertCircle, AlertTriangle, ReceiptText, 
-  ChevronDown, Calendar, FilterX, AlertOctagon,
-  ArrowUpCircle, ArrowDownCircle, ListFilter,
-  CalendarDays
+  ChevronDown, AlertOctagon,
+  ListFilter,
+  CalendarDays,
+  FileText
 } from 'lucide-react';
 import { Transaction, TransactionType } from '../types';
 
@@ -20,8 +21,6 @@ const ITEMS_PER_PAGE = 20;
 type FilterType = 'all' | TransactionType.INCOME | TransactionType.EXPENSE;
 
 export const TransactionList: React.FC<TransactionListProps> = ({ transactions, onDelete, onToggleStatus }) => {
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
   const [filterType, setFilterType] = useState<FilterType>('all');
   const [displayLimit, setDisplayLimit] = useState(ITEMS_PER_PAGE);
   const [transactionToDelete, setTransactionToDelete] = useState<Transaction | null>(null);
@@ -39,16 +38,10 @@ export const TransactionList: React.FC<TransactionListProps> = ({ transactions, 
     return 'today';
   };
 
-  // Memoized filtering and sorting
-  const { filteredTransactions, sortedTransactions } = useMemo(() => {
+  // Memoized filtering and sorting (only by Type since Date is handled globally)
+  const { sortedTransactions } = useMemo(() => {
     const filtered = transactions.filter((t) => {
-      // Date Filter
-      if (startDate && t.date < startDate) return false;
-      if (endDate && t.date > endDate) return false;
-      
-      // Type Filter
       if (filterType !== 'all' && t.type !== filterType) return false;
-      
       return true;
     });
 
@@ -56,8 +49,8 @@ export const TransactionList: React.FC<TransactionListProps> = ({ transactions, 
       new Date(b.date).getTime() - new Date(a.date).getTime()
     );
 
-    return { filteredTransactions: filtered, sortedTransactions: sorted };
-  }, [transactions, startDate, endDate, filterType]);
+    return { sortedTransactions: sorted };
+  }, [transactions, filterType]);
 
   // Paginated View
   const paginatedTransactions = useMemo(() => {
@@ -81,13 +74,6 @@ export const TransactionList: React.FC<TransactionListProps> = ({ transactions, 
     return new Date(dateString).toLocaleDateString('pt-BR', {timeZone: 'UTC'});
   };
 
-  const clearFilters = () => {
-    setStartDate('');
-    setEndDate('');
-    setFilterType('all');
-    setDisplayLimit(ITEMS_PER_PAGE);
-  };
-
   const handleDeleteConfirm = () => {
     if (transactionToDelete) {
       onDelete(transactionToDelete.id);
@@ -100,7 +86,6 @@ export const TransactionList: React.FC<TransactionListProps> = ({ transactions, 
     
     const today = new Date();
     today.setHours(0,0,0,0);
-    // Use dueDate if available, fallback to date
     const targetDateStr = t.dueDate || t.date;
     const dueDate = new Date(targetDateStr);
     const localDueDate = new Date(dueDate.valueOf() + dueDate.getTimezoneOffset() * 60000);
@@ -120,7 +105,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({ transactions, 
     if (t.isPaid) return 'opacity-60 bg-slate-50/50';
     
     const status = getDeadlineStatus(t);
-    if (status === 'overdue') return 'bg-red-50 border-l-4 border-red-500';
+    if (status === 'overdue') return 'bg-red-50 border-l-4 border-red-500 shadow-inner shadow-red-500/5';
     if (status === 'soon') return 'bg-amber-50 border-l-4 border-amber-400';
     
     return '';
@@ -134,13 +119,11 @@ export const TransactionList: React.FC<TransactionListProps> = ({ transactions, 
      if (t.isPaid) return 'opacity-70 border-l-4 border-slate-300 bg-white';
      
      const status = getDeadlineStatus(t);
-     if (status === 'overdue') return 'border-l-4 border-red-500 bg-red-50/60';
-     if (status === 'soon') return 'border-l-4 border-amber-400 bg-amber-50/60';
+     if (status === 'overdue') return 'border-l-4 border-red-500 bg-red-50 ring-1 ring-red-100 shadow-sm';
+     if (status === 'soon') return 'border-l-4 border-amber-400 bg-amber-50 ring-1 ring-amber-100 shadow-sm';
      
      return 'border-l-4 border-rose-500 bg-white';
   };
-
-  const isFiltered = startDate !== '' || endDate !== '' || filterType !== 'all';
 
   if (transactions.length === 0) {
     return (
@@ -148,8 +131,8 @@ export const TransactionList: React.FC<TransactionListProps> = ({ transactions, 
         <div className="bg-slate-50 w-20 h-20 rounded-full flex items-center justify-center mb-6">
           <span className="text-4xl">📝</span>
         </div>
-        <h3 className="text-xl font-semibold text-slate-800">Nenhuma transação</h3>
-        <p className="text-slate-500 mt-2 text-base max-w-xs mx-auto">Adicione suas receitas e despesas para começar a controlar.</p>
+        <h3 className="text-xl font-semibold text-slate-800">Nenhuma transação no período</h3>
+        <p className="text-slate-500 mt-2 text-base max-w-xs mx-auto">Ajuste os filtros de data acima ou adicione novos registros.</p>
       </div>
     );
   }
@@ -188,107 +171,40 @@ export const TransactionList: React.FC<TransactionListProps> = ({ transactions, 
         </div>
       )}
 
-      {/* Header and Filters */}
-      <div className="p-4 sm:p-6 border-b border-slate-100 flex flex-col gap-6">
-        <div className="flex justify-between items-center">
-          <h3 className="font-bold text-lg text-slate-900 flex items-center gap-2">
-            Histórico de Atividades
-            {isFiltered && (
-              <span className="flex items-center gap-1 text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-full uppercase tracking-wider animate-pulse">
-                Filtrado
-              </span>
-            )}
-          </h3>
-          <span className="text-xs font-bold text-slate-400 bg-slate-50 border border-slate-100 px-3 py-1.5 rounded-lg shadow-sm">
-            {filteredTransactions.length} registros
+      {/* Header and Quick Type Filter */}
+      <div className="p-4 sm:p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <h3 className="font-bold text-lg text-slate-900 flex items-center gap-2">
+          Histórico Filtrado
+          <span className="text-xs font-bold text-slate-400 bg-slate-50 border border-slate-100 px-3 py-1 rounded-lg">
+            {sortedTransactions.length} registros
           </span>
-        </div>
+        </h3>
 
-        {/* Improved Filter Controls */}
-        <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100 space-y-4">
-          <div className="flex flex-col xl:flex-row gap-4">
-            
-            {/* Type Filter Section */}
-            <div className="flex-1">
-              <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-                <ListFilter className="w-3 h-3" /> Filtrar Tipo
-              </div>
-              <div className="flex bg-white border border-slate-200 p-1 rounded-xl shadow-sm">
-                <button
-                  onClick={() => setFilterType('all')}
-                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                    filterType === 'all' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'
-                  }`}
-                >
-                  Tudo
-                </button>
-                <button
-                  onClick={() => setFilterType(TransactionType.INCOME)}
-                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                    filterType === TransactionType.INCOME ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'
-                  }`}
-                >
-                  Receitas
-                </button>
-                <button
-                  onClick={() => setFilterType(TransactionType.EXPENSE)}
-                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                    filterType === TransactionType.EXPENSE ? 'bg-rose-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'
-                  }`}
-                >
-                  Despesas
-                </button>
-              </div>
-            </div>
-
-            {/* Date Filter Section */}
-            <div className="xl:flex-[2]">
-              <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-                <Calendar className="w-3 h-3" /> Filtrar Período
-              </div>
-              <div className="flex flex-col sm:flex-row items-center gap-3">
-                <div className="relative w-full">
-                  <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
-                    <Calendar className="w-4 h-4" />
-                  </div>
-                  <input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-sm"
-                  />
-                  <span className="absolute -top-2 left-3 bg-white px-1 text-[9px] font-bold text-slate-400 uppercase">De</span>
-                </div>
-
-                <div className="hidden sm:block text-slate-300 font-light">/</div>
-
-                <div className="relative w-full">
-                  <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
-                    <Calendar className="w-4 h-4" />
-                  </div>
-                  <input
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-sm"
-                  />
-                  <span className="absolute -top-2 left-3 bg-white px-1 text-[9px] font-bold text-slate-400 uppercase">Até</span>
-                </div>
-
-                {/* Clear Button */}
-                {isFiltered && (
-                  <button
-                    onClick={clearFilters}
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl transition-all border border-rose-100 shrink-0 w-full sm:w-auto justify-center"
-                    title="Limpar todos os filtros"
-                  >
-                    <FilterX className="w-4 h-4" /> <span className="sm:hidden xl:inline">Limpar</span>
-                  </button>
-                )}
-              </div>
-            </div>
-
-          </div>
+        <div className="flex bg-slate-100 p-1 rounded-xl w-full sm:w-auto">
+          <button
+            onClick={() => setFilterType('all')}
+            className={`flex-1 sm:px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${
+              filterType === 'all' ? 'bg-white text-slate-900 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            Tudo
+          </button>
+          <button
+            onClick={() => setFilterType(TransactionType.INCOME)}
+            className={`flex-1 sm:px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${
+              filterType === TransactionType.INCOME ? 'bg-white text-emerald-600 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            Receitas
+          </button>
+          <button
+            onClick={() => setFilterType(TransactionType.EXPENSE)}
+            className={`flex-1 sm:px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${
+              filterType === TransactionType.EXPENSE ? 'bg-white text-rose-600 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            Despesas
+          </button>
         </div>
       </div>
 
@@ -297,12 +213,15 @@ export const TransactionList: React.FC<TransactionListProps> = ({ transactions, 
         {paginatedTransactions.map((t) => {
           const status = getDeadlineStatus(t);
           const timeStatus = getTransactionTimeStatus(t.date);
+          const isUnpaidExpense = t.type === TransactionType.EXPENSE && !t.isPaid;
+          const isIncome = t.type === TransactionType.INCOME;
+
           return (
-            <div key={t.id} className={`p-4 rounded-xl shadow-sm border border-slate-100 relative transition-colors ${getMobileCardStyle(t)}`}>
+            <div key={t.id} className={`p-4 rounded-xl shadow-sm border border-slate-100 relative transition-all duration-300 ${getMobileCardStyle(t)}`}>
                <div className="flex justify-between items-start mb-2">
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block truncate">
                           {t.category}
                         </span>
                         {timeStatus === 'future' && (
@@ -312,59 +231,77 @@ export const TransactionList: React.FC<TransactionListProps> = ({ transactions, 
                         )}
                      </div>
                      <div className="flex items-start gap-2">
-                        {t.type === TransactionType.INCOME && (
-                          <ReceiptText className="w-4 h-4 text-emerald-500 mt-1 flex-shrink-0" />
+                        {isIncome && (
+                          <div className="bg-emerald-50 p-1 rounded-md mt-0.5">
+                            <FileText className="w-3.5 h-3.5 text-emerald-600" />
+                          </div>
                         )}
-                        {t.type === TransactionType.EXPENSE && !t.isPaid && (
-                          <AlertTriangle className={`w-4 h-4 mt-1 flex-shrink-0 ${status === 'overdue' ? 'text-red-500' : 'text-amber-500'}`} />
+                        {!isIncome && isUnpaidExpense && (
+                           <div className={`p-1 rounded-md mt-0.5 ${status === 'overdue' ? 'bg-red-100' : 'bg-amber-100'}`}>
+                             <AlertTriangle className={`w-3.5 h-3.5 ${status === 'overdue' ? 'text-red-600' : 'text-amber-600'}`} />
+                           </div>
                         )}
-                        <h4 className={`font-bold text-base leading-tight ${t.isPaid ? 'text-slate-500 line-through font-medium' : 'text-slate-800'}`}>
+                        <h4 className={`font-bold text-base leading-tight truncate ${t.isPaid ? 'text-slate-500 line-through font-medium' : 'text-slate-800'}`}>
                           {t.description}
                         </h4>
                      </div>
                      {t.dueDate && t.dueDate !== t.date && (
-                       <p className="text-[10px] text-slate-400 mt-1">Vence em: {formatDate(t.dueDate)}</p>
+                       <p className={`text-[10px] mt-1 font-medium ${isUnpaidExpense && status === 'overdue' ? 'text-red-600' : 'text-slate-400'}`}>
+                         Vence em: {formatDate(t.dueDate)}
+                       </p>
                      )}
                   </div>
-                  <div className="text-right ml-4">
+                  <div className="text-right ml-4 shrink-0">
                      <p className={`font-bold text-base whitespace-nowrap ${
-                        t.type === TransactionType.INCOME ? 'text-emerald-600' : 'text-slate-800'
+                        isIncome ? 'text-emerald-600' : 'text-slate-800'
                       }`}>
-                        {t.type === TransactionType.EXPENSE && '- '}{formatCurrency(t.amount)}
+                        {!isIncome && '- '}{formatCurrency(t.amount)}
                      </p>
-                     <div className="flex items-center justify-end gap-1 mt-1">
-                        <p className={`text-[11px] font-medium ${timeStatus === 'future' ? 'text-blue-600' : status === 'overdue' ? 'text-red-600' : status === 'soon' ? 'text-amber-600' : 'text-slate-400'}`}>
+                     <div className="flex items-center justify-end gap-1.5 mt-1">
+                        <p className={`text-[11px] font-bold ${timeStatus === 'future' ? 'text-blue-600' : status === 'overdue' ? 'text-red-600' : status === 'soon' ? 'text-amber-600' : 'text-slate-400'}`}>
                           {formatDate(t.date)}
                         </p>
                         {(status === 'overdue' || status === 'soon') && (
-                          <span title={status === 'overdue' ? 'Atrasado' : 'Vence em breve'}>
-                            <AlertCircle className={`w-3 h-3 ${status === 'overdue' ? 'text-red-600' : 'text-amber-600'}`} />
-                          </span>
+                          <div className="flex items-center" title={status === 'overdue' ? 'Atrasado' : 'Vence em breve'}>
+                            <AlertCircle className={`w-3.5 h-3.5 ${status === 'overdue' ? 'text-red-600 animate-pulse' : 'text-amber-600'}`} />
+                          </div>
                         )}
                      </div>
                   </div>
                </div>
                
-               <div className="flex items-center gap-3 mt-4 pt-3 border-t border-slate-100/50">
+               <div className="flex items-center gap-3 mt-4 pt-3 border-t border-slate-200/50">
                   <button 
                     onClick={() => onToggleStatus(t.id)}
-                    className={`flex-1 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-colors ${
+                    className={`flex-1 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all ${
                       t.isPaid 
                         ? 'bg-slate-100 text-slate-500' 
                         : timeStatus === 'future'
                         ? 'bg-blue-50 text-blue-700'
-                        : 'bg-emerald-50 text-emerald-700'
+                        : isUnpaidExpense 
+                        ? 'bg-rose-600 text-white shadow-md shadow-rose-200' 
+                        : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
                     }`}
                   >
                     {t.isPaid ? (
                       <><CheckCircle2 className="w-4 h-4" /> Pago</>
                     ) : (
-                      <><Clock className="w-4 h-4" /> {timeStatus === 'future' ? 'Agendado' : 'Pendente'}</>
+                      <>
+                        {isUnpaidExpense ? (
+                          <AlertTriangle className="w-4 h-4" />
+                        ) : (
+                          <Clock className="w-4 h-4" />
+                        )}
+                        <span className="uppercase tracking-tight">
+                          {timeStatus === 'future' ? 'Agendado' : 'Pendente'}
+                        </span>
+                        {isUnpaidExpense && <span className="text-[10px] bg-white text-rose-600 px-1.5 py-0.5 rounded ml-1 font-black">!</span>}
+                      </>
                     )}
                   </button>
                   <button 
                     onClick={() => setTransactionToDelete(t)}
-                    className="w-10 h-10 flex items-center justify-center bg-red-50 text-red-500 rounded-lg active:bg-red-100 transition-colors"
+                    className="w-10 h-10 flex items-center justify-center bg-red-50 text-red-500 rounded-lg active:bg-red-100 transition-colors border border-red-100"
                   >
                     <Trash2 className="w-5 h-5" />
                   </button>
@@ -373,18 +310,12 @@ export const TransactionList: React.FC<TransactionListProps> = ({ transactions, 
           );
         })}
 
-        {filteredTransactions.length === 0 && (
-          <div className="text-center py-12 text-slate-400">
-            <p className="text-sm">Nenhum resultado para os filtros selecionados.</p>
-          </div>
-        )}
-
         {hasMore && (
           <button 
             onClick={handleLoadMore}
             className="w-full py-4 text-sm font-bold text-slate-500 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 flex items-center justify-center gap-2"
           >
-            <ChevronDown className="w-4 h-4" /> Carregar mais registros
+            <ChevronDown className="w-4 h-4" /> Carregar mais
           </button>
         )}
       </div>
@@ -406,22 +337,37 @@ export const TransactionList: React.FC<TransactionListProps> = ({ transactions, 
               {paginatedTransactions.map((t) => {
                 const timeStatus = getTransactionTimeStatus(t.date);
                 const status = getDeadlineStatus(t);
+                const isUnpaidExpense = t.type === TransactionType.EXPENSE && !t.isPaid;
+
                 return (
                   <tr key={t.id} className={`hover:bg-opacity-80 transition-colors group ${getRowStyle(t)}`}>
                     <td className="px-4 py-4 text-center">
-                      <button 
-                        onClick={() => onToggleStatus(t.id)}
-                        className={`p-1 rounded-full transition-all ${
-                          t.isPaid 
-                            ? 'text-emerald-500 bg-emerald-50 hover:bg-emerald-100' 
-                            : timeStatus === 'future'
-                            ? 'text-blue-500 bg-blue-50 hover:bg-blue-100'
-                            : 'text-slate-300 bg-slate-100 hover:bg-emerald-100 hover:text-emerald-500'
-                        }`}
-                        title={t.isPaid ? "Marcar como pendente" : "Marcar como pago"}
-                      >
-                        {t.isPaid ? <CheckCircle2 className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
-                      </button>
+                      <div className="flex flex-col items-center justify-center gap-1">
+                        <button 
+                          onClick={() => onToggleStatus(t.id)}
+                          className={`p-1.5 rounded-full transition-all ${
+                            t.isPaid 
+                              ? 'text-emerald-500 bg-emerald-50 hover:bg-emerald-100' 
+                              : timeStatus === 'future'
+                              ? 'text-blue-500 bg-blue-50 hover:bg-blue-100'
+                              : isUnpaidExpense
+                              ? 'text-rose-600 bg-rose-50 hover:bg-rose-100 ring-2 ring-rose-300 animate-pulse'
+                              : 'text-slate-300 bg-slate-100 hover:bg-emerald-100 hover:text-emerald-500'
+                          }`}
+                          title={t.isPaid ? "Pago" : isUnpaidExpense ? "PAGAMENTO PENDENTE!" : "Pendente"}
+                        >
+                          {t.isPaid ? (
+                            <CheckCircle2 className="w-4 h-4" />
+                          ) : isUnpaidExpense ? (
+                            <AlertCircle className="w-4 h-4" />
+                          ) : (
+                            <Clock className="w-4 h-4" />
+                          )}
+                        </button>
+                        {!t.isPaid && isUnpaidExpense && (
+                          <span className="text-[9px] font-black text-rose-600 uppercase tracking-tighter">Pendente</span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-3">
@@ -443,8 +389,10 @@ export const TransactionList: React.FC<TransactionListProps> = ({ transactions, 
                           <span className={`font-medium ${t.isPaid ? 'text-slate-500 line-through' : 'text-slate-700'}`}>
                             {t.description}
                           </span>
-                          {timeStatus === 'future' && (
-                            <span className="text-[9px] font-bold text-blue-600 uppercase tracking-tighter">Agendado</span>
+                          {!t.isPaid && isUnpaidExpense && (
+                            <span className="text-[10px] text-rose-600 font-bold flex items-center gap-1">
+                               <AlertTriangle className="w-3 h-3" /> PRECISA PAGAR
+                            </span>
                           )}
                         </div>
                       </div>
@@ -460,8 +408,8 @@ export const TransactionList: React.FC<TransactionListProps> = ({ transactions, 
                           <span className={timeStatus === 'future' ? 'text-blue-600 font-medium' : ''}>
                             {formatDate(t.date)}
                           </span>
-                          {status === 'overdue' && <span title="Atrasado"><AlertCircle className="w-3 h-3 text-red-500" /></span>}
-                          {status === 'soon' && <span title="Vence em breve"><AlertCircle className="w-3 h-3 text-amber-500" /></span>}
+                          {status === 'overdue' && <AlertCircle className="w-3 h-3 text-red-500 animate-bounce" />}
+                          {status === 'soon' && <AlertCircle className="w-3 h-3 text-amber-500" />}
                         </div>
                         {t.dueDate && t.dueDate !== t.date && (
                           <span className="text-[10px] text-slate-400">Vence: {formatDate(t.dueDate)}</span>
@@ -478,7 +426,6 @@ export const TransactionList: React.FC<TransactionListProps> = ({ transactions, 
                       <button 
                         onClick={() => setTransactionToDelete(t)}
                         className="text-slate-300 hover:text-red-500 transition-colors p-1"
-                        title="Excluir"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -486,14 +433,6 @@ export const TransactionList: React.FC<TransactionListProps> = ({ transactions, 
                   </tr>
                 );
               })}
-
-              {filteredTransactions.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-4 py-12 text-center text-slate-400 text-sm">
-                    Nenhum resultado encontrado para os filtros atuais.
-                  </td>
-                </tr>
-              )}
             </tbody>
           </table>
           
